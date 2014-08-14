@@ -32,31 +32,7 @@ type Workload struct {
     Expire int64
     Ttl int64
     OpRate int64
-
-}
-
-func (w *Workload) UpdateSpec(wTree *toml.TomlTree){
-
-    s := reflect.ValueOf(w).Elem()
-    for _, key := range wTree.Keys() {
-
-            // get override field name
-            fieldName := strings.ToUpper(string(key[0]))+key[1:]
-            field := s.FieldByName(fieldName)
-            if !field.IsValid() {
-                fmt.Println("field %s is invalid..skipping", key)
-                continue
-            }
-
-            // set underlying spec value with appropriate type
-            switch field.Kind() {
-
-                case reflect.Int64:
-                    val := wTree.Get(key).(int64)
-                    field.SetInt(val)
-            }
-
-    }
+    Templates []string
 
 }
 
@@ -65,33 +41,13 @@ func (w *Workload) Run() {
     fmt.Println(w.Set)
 }
 
-type DefaultConfig struct {
-    workload *Workload
-}
-
-func (cfg *DefaultConfig) defineWorkload(workload *toml.TomlTree) {
-
-    cfg.workload = new(Workload)
-    cfg.workload.UpdateSpec(workload)
-
-}
-
-func newDefaultConfig (fileName string) *DefaultConfig {
-
-    var config *DefaultConfig
-    tomlConfig, err := toml.LoadFile(fileName)
-    mf(err, "load_definitions")
-
-    config = new(DefaultConfig)
-    workload := tomlConfig.Get(WORKLOADS).(*toml.TomlTree)
-    fmt.Println(workload)
-    config.defineWorkload(workload)
-
-    return config
- }
-
 type Phase struct {
     tasks map[string]Tasker
+    Workloads [][]string
+    Add []string
+    Remove []string
+    AutoFailover []string
+    Runtime int64
 }
 
 func (p *Phase) AddWorkloads(workloads []interface{}, t *Test){
@@ -111,7 +67,7 @@ func (p *Phase) AddWorkloads(workloads []interface{}, t *Test){
 
                 // update with values from spec 
                 wTree := t.spec.Get(wPath).(*toml.TomlTree)
-                workload.UpdateSpec(wTree)
+                UpdateTypeWithSpec(workload, wTree)
 
                 // add to phase
                 p.tasks[wPath] = Tasker(workload)
@@ -180,6 +136,109 @@ func (t *Test) Run() {
     for _, p := range t.phases {
         p.Run()
     }
+}
+
+
+
+
+
+type DefaultConfig struct {
+    workload *Workload
+}
+
+func (cfg *DefaultConfig) DefineWorkload(wSpec *toml.TomlTree) {
+
+    cfg.workload = new(Workload)
+    UpdateTypeWithSpec(cfg.workload, wSpec)
+
+}
+
+func newDefaultConfig (fileName string) *DefaultConfig {
+
+    var config *DefaultConfig
+    tomlConfig, err := toml.LoadFile(fileName)
+    mf(err, "load_definitions")
+
+    config = new(DefaultConfig)
+    workload := tomlConfig.Get(WORKLOADS).(*toml.TomlTree)
+    config.DefineWorkload(workload)
+
+    return config
+ }
+
+func UpdateTypeWithSpec(t interface{}, wTree *toml.TomlTree){
+
+    s := reflect.ValueOf(t).Elem()
+    for _, key := range wTree.Keys() {
+
+            // get override field name
+            fieldName := strings.ToUpper(string(key[0]))+key[1:]
+            field := s.FieldByName(fieldName)
+            if !field.IsValid() {
+                fmt.Println("field %s is invalid..skipping", key)
+                continue
+            }
+
+            // set underlying spec value with appropriate type
+            switch field.Kind() {
+
+                case reflect.Int64:
+                    val := wTree.Get(key).(int64)
+                    field.SetInt(val)
+
+               case reflect.String:
+                    val := wTree.Get(key).(string)
+                    field.SetString(val)
+
+               case reflect.Slice:
+                    vals := wTree.Get(key).([]interface{})
+                    vSlice := makeValueSlice(vals)
+                    if vSlice.IsValid() {
+                        field.Set(vSlice)
+                    }
+            }
+
+    }
+
+}
+
+func makeValueSlice(vals []interface{}) reflect.Value {
+
+    var vSlice reflect.Value
+
+
+    // unpack slice of strings
+    for i := range vals {
+
+        // check if value is a subslice
+        switch vals[i].(type) {
+
+            case string:
+                tp := reflect.TypeOf([]string{""})
+                if !vSlice.IsValid() {
+                    vSlice = reflect.MakeSlice(tp, len(vals), len(vals))
+                }
+
+                // create temp struct Value
+                v := reflect.New(reflect.TypeOf(""))
+                iv := reflect.Indirect(v)
+
+                // set Value in slice from incomming string
+                iv.SetString(vals[i].(string))
+                vSlice.Index(i).Set(iv)
+
+            case []interface{}:
+                tp := reflect.TypeOf([][]string{{""}, {""}})
+                if !vSlice.IsValid() {
+                    vSlice = reflect.MakeSlice(tp, len(vals), len(vals))
+                }
+                subSlice := vals[i].([]interface{})
+                vSlice.Index(i).Set(makeValueSlice(subSlice))
+
+       }
+    }
+
+    return vSlice
 }
 
 func mf(err error, msg string) {

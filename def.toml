@@ -11,7 +11,7 @@
     update = 0
     expire = 0 
     ttl = 15
-    templates = ["template."]
+    templates = ["templates."]
     opRate = 100
 
 [nodes]
