@@ -37,7 +37,6 @@ type Workload struct {
 }
 
 func (w *Workload) Run() {
-    fmt.Println("runneth over")
     fmt.Println(w.Set)
 }
 
@@ -228,6 +227,7 @@ func makeValueSlice(vals []interface{}) reflect.Value {
                 vSlice.Index(i).Set(iv)
 
             case []interface{}:
+                // handle 2d array fields
                 tp := reflect.TypeOf([][]string{{""}, {""}})
                 if !vSlice.IsValid() {
                     vSlice = reflect.MakeSlice(tp, len(vals), len(vals))
