@@ -1,0 +1,41 @@
+## BASE CONFIG DO NOT CHANGE !!
+
+[buckets]
+    quota = 1024
+    replica = 1
+
+[workloads]
+    set = 0
+    get = 0
+    delete = 0
+    update = 0
+    expire = 0 
+    ttl = 15
+    templates = ["template."]
+    opRate = 100
+
+[nodes]
+    ip = ""
+    port = 8091
+
+[conditions]
+    stat = ""
+    value = -1 
+    equal = false 
+    less_than = false 
+    greater_than = false 
+
+[phases]
+    # list of types [workload, bucket, conditions]
+    # by default runs workload against all available buckets
+
+    workloads = [
+      ["workloads.", "buckets.*", "conditions."]
+    ]
+
+    add = [] 
+    remove = [] 
+    auto_failover = []
+    runtime = 30
+
+

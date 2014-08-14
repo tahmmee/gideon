@@ -1,0 +1,21 @@
+#https://gist.github.com/tahmmee/80760eeccda3dc005f76
+# * means use all subtrees
+# ^* means use all subtrees except specified value
+# _ means use default value specified in parent 
+# & means reference key from subtree
+
+
+nodes = 1
+buckets = 1
+
+[workloads.SetOnly]
+    set = 100
+
+[phase.0]
+  workloads = [
+    ["SetOnly"],
+  ]
+
+[test]
+    name = "simple"
+    phases = ["phase.0"]

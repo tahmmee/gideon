@@ -1,0 +1,66 @@
+#https://gist.github.com/tahmmee/80760eeccda3dc005f76
+
+nodes = 4
+buckets = 4
+
+[bucket.1]
+    quota = 512
+
+
+[node.1]
+    ip = "127.0.0.1"
+
+
+[phase.setup]
+    createBuckets = ["bucket.*"]
+    add = ["node.*"] 
+
+[phase.load_init]
+    workloads = [
+                  ["SetOnly"],
+                  ["SetOnly.HeavyExpire.opRate.20", "bucket.1"]
+                ]
+
+[phase.reb_out_two]
+    workloads = [
+                  ["HighGet", "bucket.1"],
+                  ["LightExpire.opRate.5", "bucket.2"],
+                  ["ModerateDelete", "bucket.3"]
+                ]
+    remove = ["node.1", "node.2"] 
+
+[phase.load1]
+    workloads = [
+                    ["SetOnly",
+                     "SetOnly.HeavyExpire", "bucket.2"]
+                ]
+
+[phase.failover_one]
+    workloads = "&phase.reb_out_two.workloads"
+    auto_failover = ["node.3"] 
+
+
+[phase.load2]
+    workloads = [
+                ["SetOnly", "bucket.1", "vb_active_lt.70"],
+                ["SetOnly.HeavyExpire", "bucket.2", "vb_active_lt.value"],
+                ["SetOnly", "bucket.3", "vb_active_lt.value"]
+            ]
+
+[phase.eject_phase]
+    workloads = ["SetGetEqual",
+                 "SetGetEqual.opRate.100", "bucket.1"]
+
+    runtime = 600
+
+[test]
+    name = "test_name"
+    phases = ["phase.*"]
+
+# * means use all subtrees
+# ^* means use all subtrees except specified value
+# _ means use default value specified in parent 
+# & means reference key from subtree
+
+# usuall create subclass when modifying more than 1 var 
+#  ie. ["SetOnly.expire.90.ttl.21600", "standardbucket1"] vs ["SetOnly.HeavyExpire", "standardbucket1"]

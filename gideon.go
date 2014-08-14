@@ -27,7 +27,7 @@ type Workload struct {
 
     Set int64
     Get int64
-    Del int64
+    Delete int64
     Update int64
     Expire int64
     Ttl int64
@@ -195,7 +195,7 @@ func main() {
     config := newDefaultConfig("def.toml")
 
     // load test spec 
-    test := newTest("simple.toml", config)
+    test := newTest("examples/simple.toml", config)
 
     // run
     test.Run()
