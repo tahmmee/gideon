@@ -11,11 +11,11 @@ buckets = 1
 [workloads.SetOnly]
     set = 100
 
-[phase.0]
+[phases.0]
   workloads = [
     ["SetOnly"],
   ]
 
 [test]
     name = "simple"
-    phases = ["phase.0"]
+    phases = ["phases.0"]

@@ -6,11 +6,13 @@ import (
     "log"
     "strings"
     "reflect"
+    "errors"
     "github.com/pelletier/go-toml"
 )
 
 
 const (
+    TEST        = string("test")
     WORKLOADS   = string("workloads")
     BUCKETS     = string("buckets")
     NODES       = string("nodes")
@@ -49,6 +51,7 @@ type Phase struct {
     Runtime int64
 }
 
+
 func (p *Phase) AddWorkloads(workloads []interface{}, t *Test){
 
     for _, w := range workloads {
@@ -61,10 +64,10 @@ func (p *Phase) AddWorkloads(workloads []interface{}, t *Test){
                     log.Fatalf("missing defn for %s", wPath)
                 }
 
-                // set to base workload 
+                // set to base workload
                 workload := t.defaults.workload
 
-                // update with values from spec 
+                // update with values from spec
                 wTree := t.spec.Get(wPath).(*toml.TomlTree)
                 UpdateTypeWithSpec(workload, wTree)
 
@@ -87,62 +90,138 @@ type Test struct {
     phases map[string]*Phase
     spec *toml.TomlTree
     defaults *DefaultConfig
+    base *toml.TomlTree
 }
 
+func (t *Test)BuildSubDirective(name string) (interface{}, error){
 
-func (t *Test) AddPhase(pTree *toml.TomlTree) {
-    phase := new(Phase)
-    phase.tasks = make(map[string]Tasker)
+    // creates inherited directives from test spec
 
-    for _, task := range pTree.Keys() {
-        switch  task {
-            case WORKLOADS:
-                workloads := pTree.Get(WORKLOADS).([]interface{})
-                phase.AddWorkloads(workloads, t)
-                t.phases[pTree.ToString()] = phase
-        }
-        fmt.Println(task)
+    var err error
+    var rc interface{}
+
+    path := strings.Split(name, ".")
+
+    // initialize base object
+    switch path[0] {
+
+        case WORKLOADS:
+            rc = new(Workload)
+            spec :=  t.base.Get(WORKLOADS).(*toml.TomlTree)
+            UpdateTypeWithSpec(rc, spec)
+        case PHASES:
+            rc = new(Phase)
+            rc.(*Phase).tasks = make(map[string]Tasker)
+            spec :=  t.base.Get(PHASES).(*toml.TomlTree)
+            UpdateTypeWithSpec(rc, spec)
+
     }
+
+    // construct workload hierarchy from test spec
+    if len(path) < 2 {
+        err = errors.New("Invalid sub-directive "+name)
+        return nil, err
+    }
+
+    for i := 2; i<=len(path); i++ {
+        dName := strings.Join(path[0:i], ".")
+        if !t.spec.Has(dName+".") {
+            err = errors.New("missing directive "+dName)
+        } else {
+            subSpec :=  t.spec.Get(dName).(*toml.TomlTree)
+            UpdateTypeWithSpec(rc, subSpec)
+        }
+    }
+
+    return rc, err
+
+
 }
 
-func newTest(spec string, config *DefaultConfig) *Test {
+func (t *Test) LinkPhaseTasks(phase *Phase) error {
+
+    // link phase construct to runnable tasks
+    for _, wDef := range phase.Workloads {
+        for i, wAttr := range wDef {
+            switch i {
+                case 0:
+
+                    // link workload directive
+                    wName := WORKLOADS+"."+wAttr
+                    w, err := t.BuildSubDirective(wName)
+                    if err != nil {
+                        return err
+                    }
+                    phase.tasks[wName] = Tasker(w.(*Workload))
+            }
+        }
+    }
+
+    return nil
+}
+
+func (t* Test) LinkTestPhases() error {
+
+    var err error
+    tDef := t.spec.Get(TEST).(*toml.TomlTree)
+    if tDef == nil {
+        err = errors.New("Test spec missing [test] directive ")
+        return err
+    }
+
+    pNames := tDef.Get(PHASES).([]interface{})
+    for _, pName := range pNames {
+        phase, e := t.BuildSubDirective(pName.(string))
+        err = e
+        p := phase.(*Phase)
+        if err == nil {
+            err = t.LinkPhaseTasks(p)
+            if err == nil {
+                t.phases[pName.(string)] = p
+            }
+        }
+    }
+
+
+    return err
+}
+
+
+func newTest(spec string) *Test {
+
+    baseSpec, err := toml.LoadFile("def.toml")
+    mf(err, "load..def.toml")
 
     testSpec, err := toml.LoadFile(spec)
-    mf(err, "load-spec")
+    mf(err, "load.."+spec)
 
     test := new(Test)
     test.spec = testSpec
-    test.defaults = config
+    test.base = baseSpec
+    test.defaults = newDefaultConfig("def.toml")
     test.phases = make(map[string]*Phase)
-
-    phases := testSpec.Get("test.phases").([]interface{})
-    for _,k := range phases {
-        phaseName := testSpec.Get(k.(string))
-        if phaseName == nil {
-            log.Fatalf("missing defined phase %s", k)
-        } else {
-            phaseTree := phaseName.(*toml.TomlTree)
-            test.AddPhase(phaseTree)
-        }
-    }
 
     return test
 }
 
 
-
-func (t *Test) Run() {
+func (t *Test) Run() error {
+    err := t.LinkTestPhases()
+    if err != nil {
+        return err
+    }
     for _, p := range t.phases {
         p.Run()
     }
+
+    return err
 }
-
-
 
 
 
 type DefaultConfig struct {
     workload *Workload
+    phase *Phase
 }
 
 func (cfg *DefaultConfig) DefineWorkload(wSpec *toml.TomlTree) {
@@ -159,8 +238,20 @@ func newDefaultConfig (fileName string) *DefaultConfig {
     mf(err, "load_definitions")
 
     config = new(DefaultConfig)
-    workload := tomlConfig.Get(WORKLOADS).(*toml.TomlTree)
-    config.DefineWorkload(workload)
+    for _, key := range tomlConfig.Keys() {
+
+        switch key {
+            case WORKLOADS:
+                spec := tomlConfig.Get(WORKLOADS).(*toml.TomlTree)
+                config.workload = new(Workload)
+                UpdateTypeWithSpec(config.workload, spec)
+
+            case PHASES:
+                spec := tomlConfig.Get(PHASES).(*toml.TomlTree)
+                config.phase = new(Phase)
+                UpdateTypeWithSpec(config.phase, spec)
+        }
+    }
 
     return config
  }
@@ -250,11 +341,8 @@ func mf(err error, msg string) {
 func main() {
 
 
-    // load base definitions
-    config := newDefaultConfig("def.toml")
-
-    // load test spec 
-    test := newTest("examples/simple.toml", config)
+    // load test spec
+    test := newTest("examples/simple.toml")
 
     // run
     test.Run()

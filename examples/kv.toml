@@ -3,25 +3,25 @@
 nodes = 4
 buckets = 4
 
-[bucket.1]
+[buckets.1]
     quota = 512
 
 
-[node.1]
+[nodes.1]
     ip = "127.0.0.1"
 
 
-[phase.setup]
+[phases.0]
     createBuckets = ["bucket.*"]
     add = ["node.*"] 
 
-[phase.load_init]
+[phases.1]
     workloads = [
                   ["SetOnly"],
                   ["SetOnly.HeavyExpire.opRate.20", "bucket.1"]
                 ]
 
-[phase.reb_out_two]
+[phases.2]
     workloads = [
                   ["HighGet", "bucket.1"],
                   ["LightExpire.opRate.5", "bucket.2"],
@@ -29,25 +29,25 @@ buckets = 4
                 ]
     remove = ["node.1", "node.2"] 
 
-[phase.load1]
+[phases.3]
     workloads = [
                     ["SetOnly",
                      "SetOnly.HeavyExpire", "bucket.2"]
                 ]
 
-[phase.failover_one]
-    workloads = "&phase.reb_out_two.workloads"
+[phases.4]
+    workloads = "&phases.reb_out_two.workloads"
     auto_failover = ["node.3"] 
 
 
-[phase.load2]
+[phases.5]
     workloads = [
                 ["SetOnly", "bucket.1", "vb_active_lt.70"],
                 ["SetOnly.HeavyExpire", "bucket.2", "vb_active_lt.value"],
                 ["SetOnly", "bucket.3", "vb_active_lt.value"]
             ]
 
-[phase.eject_phase]
+[phases.6]
     workloads = ["SetGetEqual",
                  "SetGetEqual.opRate.100", "bucket.1"]
 
@@ -55,7 +55,7 @@ buckets = 4
 
 [test]
     name = "test_name"
-    phases = ["phase.*"]
+    phases = ["phases.*"]
 
 # * means use all subtrees
 # ^* means use all subtrees except specified value

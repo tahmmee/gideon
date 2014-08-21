@@ -35,7 +35,7 @@
 
     add = [] 
     remove = [] 
-    auto_failover = []
+    autoFailover = []
     runtime = 30
 
 

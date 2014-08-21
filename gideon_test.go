@@ -133,3 +133,65 @@ func TestOverridePhase(t *testing.T) {
     }
 
 }
+
+func TestLoadDefaultConfig(t *testing.T) {
+
+    newDefaultConfig("def.toml")
+}
+
+
+func TestBuildPhase(t *testing.T) {
+
+    test := newTest("examples/simple.toml")
+    phase, err := test.BuildSubDirective("phases.0")
+    check(t, err, false)
+    eq(t, phase.(*Phase).Workloads[0][0], "SetOnly", "miss workload value")
+}
+
+
+func TestAddBadPhase(t *testing.T) {
+
+    test := newTest("examples/test/bad_subphase.toml")
+    _, err := test.BuildSubDirective("phases.0")
+    check(t, err, true)
+}
+
+func TestLinkPhaseTasks(t *testing.T){
+    test := newTest("examples/simple.toml")
+    phase, err := test.BuildSubDirective("phases.0")
+    check(t, err, false)
+    p := phase.(*Phase)
+    err = test.LinkPhaseTasks(p)
+    check(t, err, false)
+}
+
+func TestLinkPhases(t *testing.T){
+
+    test := newTest("examples/simple.toml")
+    err := test.LinkTestPhases()
+    check(t, err, false)
+}
+
+func TestRunTest(t *testing.T){
+
+    test := newTest("examples/simple.toml")
+    err := test.Run()
+    check(t, err, false)
+}
+
+
+func eq(t *testing.T, lval interface{}, rval interface{}, msg string){
+    if (lval != rval){
+        t.Errorf("%s, %d != %d", msg, lval, rval)
+    }
+}
+
+func check(t *testing.T, err error, shouldErr bool){
+
+    if err == nil && shouldErr == true {
+        t.Error(err.Error())
+    }
+    if err != nil && shouldErr == false {
+        t.Error(err.Error())
+    }
+}
